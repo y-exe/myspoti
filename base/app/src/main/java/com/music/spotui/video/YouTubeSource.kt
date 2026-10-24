@@ -136,7 +136,7 @@ object YouTubeSource {
         val found = linkedMapOf<String, Hit>()
         var lastError: Exception? = null
         for (query in OfflineSongMatcher.queries(title, artist, isrc)) {
-            val hits = try { YouTubeMusicSearch.songs(query, title) }
+            val hits = try { YouTubeMusicSearch.songs(query, "$title $artist") }
                 catch (e: Exception) { checkInterrupted(); lastError = e; continue }
             val ranked = hits.mapNotNull { h ->
                 OfflineSongMatcher.score(h.name, h.uploader, h.durationSec, title, artist, durationMs)?.let { h to it }

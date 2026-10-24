@@ -5,4 +5,5 @@
     <string name="downloads_sources_fallback">Lossless first, with optional YouTube Music audio. Source and quality are shown for each song.</string>
     <string name="downloads_upgrade_lossless">Try lossless again for YouTube songs</string>
     <string name="download_metadata_match">Metadata matched</string>
+    <string name="downloads_retry_failed">Retry unsuccessful downloads</string>
 </resources>

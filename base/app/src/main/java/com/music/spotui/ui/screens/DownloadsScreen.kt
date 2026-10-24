@@ -171,6 +171,14 @@ fun DownloadsScreen(navController: NavController) {
                         tint = Color.White.copy(alpha = 0.7f), modifier = Modifier.size(20.dp))
                 }
             }
+            if (waiting.any {
+                val status = OfflineStore.status[it.trackId]
+                status == OfflineStatus.Failed || status == OfflineStatus.Unavailable
+            }) item(key = "retry_failed") {
+                Text(stringResource(R.string.downloads_retry_failed), color = com.music.spotui.ui.theme.AppAccent,
+                    modifier = Modifier.fillMaxWidth().pressable { OfflineDownloader.retryFailed() }
+                        .padding(horizontal = 16.dp, vertical = 16.dp))
+            }
             // Songs still on their way (or that could not be downloaded).
             items(waiting, key = { "w:" + it.trackId }) { r ->
                 val status = OfflineStore.status[r.trackId]
@@ -178,7 +186,7 @@ fun DownloadsScreen(navController: NavController) {
                 Row(
                     verticalAlignment = Alignment.CenterVertically,
                     modifier = Modifier.fillMaxWidth()
-                        .pressable(0.97f) { if (status == OfflineStatus.Failed) OfflineDownloader.retry(r.trackId) }
+                        .pressable(0.97f) { if (problem) OfflineDownloader.retry(r.trackId) }
                         .padding(horizontal = 16.dp, vertical = 8.dp),
                 ) {
                     GlideImage(

@@ -5,4 +5,5 @@
     <string name="downloads_sources_fallback">ロスレスを優先し、必要に応じてYouTube Musicで補完します。各曲に取得元と音質を表示します。</string>
     <string name="downloads_upgrade_lossless">YouTubeの曲をロスレスで再取得</string>
     <string name="download_metadata_match">曲情報で照合</string>
+    <string name="downloads_retry_failed">取得できなかった曲を再試行</string>
 </resources>

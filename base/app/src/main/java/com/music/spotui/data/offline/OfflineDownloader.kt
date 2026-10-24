@@ -225,6 +225,15 @@ object OfflineDownloader {
         enqueueAll(listOf(r))
     }
 
+    /** Re-queue only completed failures; active and saved downloads are left alone. */
+    fun retryFailed() {
+        val failed = requests.values.filter {
+            val status = OfflineStore.status[it.trackId]
+            status == OfflineStatus.Failed || status == OfflineStatus.Unavailable
+        }.toList()
+        enqueueAll(failed)
+    }
+
     /** Keep the existing audio until a verified lossless replacement is committed. */
     fun upgradeYouTubeDownloads() {
         val list = OfflineStore.list().filter { it.isYouTubeFallback }.map {

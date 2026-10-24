@@ -133,24 +133,26 @@ object YouTubeSource {
     /** ISRC first, then text; rank official songs instead of accepting the first hit. */
     internal fun offlineSongs(title: String, artist: String, durationMs: Long, isrc: String,
         canVerifyAudio: Boolean): List<Hit> {
-        val found = linkedMapOf<String, Hit>()
+        val found = linkedMapOf<String, Pair<Hit, Double>>()
         var lastError: Exception? = null
+        fun keep(hit: Hit, score: Double) {
+            if (score > (found[hit.url]?.second ?: -1.0)) found[hit.url] = hit to score
+        }
         for (query in OfflineSongMatcher.queries(title, artist, isrc)) {
             val hits = try { YouTubeMusicSearch.songs(query, "$title $artist") }
                 catch (e: Exception) { checkInterrupted(); lastError = e; continue }
-            val ranked = hits.mapNotNull { h ->
-                OfflineSongMatcher.score(h.name, h.uploader, h.durationSec, title, artist, durationMs)?.let { h to it }
-            }.sortedByDescending { it.second }.map { it.first }
-            ranked.forEach { found.putIfAbsent(it.url, it) }
-            // A unique ISRC result may use a romanized title/artist. Only allow that
-            // relaxation when the downloader can confirm the actual audio by preview.
+            for (hit in hits) {
+                // A translated title (ジェリーフィッシュ / Jellyfish) can only be a
+                // candidate if the downloader will verify its actual audio by preview.
+                OfflineSongMatcher.score(hit.name, hit.uploader, hit.durationSec, title, artist,
+                    durationMs, allowTitleMismatch = canVerifyAudio)?.let { keep(hit, it) }
+            }
             if (query == isrc && canVerifyAudio && hits.size == 1 &&
                 kotlin.math.abs(hits[0].durationSec * 1000 - durationMs) <= 3000)
-                found.putIfAbsent(hits[0].url, hits[0])
-            if (found.isNotEmpty()) break
+                keep(hits[0], 0.5)
         }
         if (found.isEmpty() && lastError != null) throw lastError
-        return found.values.take(3)
+        return found.values.sortedByDescending { it.second }.map { it.first }.take(3)
     }
 
     private val excluded = Regex("""(?i)\b(lyrics?|paroles|cover|remix|reaction|karaok[eé]|slowed|sped ?up|nightcore|8d|instrumentale?|extended|tutorial|piano|guitar)\b""")

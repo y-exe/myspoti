@@ -39,4 +39,22 @@ class OfflineSongMatcherTest {
         assertTrue(score("あれこれドラスティック", seconds = 227)!! >
             score("あれこれドラスティック", seconds = 229)!!)
     }
+    @Test fun translatedTitleRequiresAudioVerificationAndStillChecksArtistAndDuration() {
+        assertNull(OfflineSongMatcher.score("Jellyfish (feat. Roller Girl)", "Yunomi", 236,
+            "ジェリーフィッシュ", "Yunomi", 235500))
+        assertNotNull(OfflineSongMatcher.score("Jellyfish (feat. Roller Girl)", "Yunomi", 236,
+            "ジェリーフィッシュ", "Yunomi", 235500, allowTitleMismatch = true))
+        assertNull(OfflineSongMatcher.score("Jellyfish", "Another Artist", 236,
+            "ジェリーフィッシュ", "Yunomi", 235500, allowTitleMismatch = true))
+        assertNull(OfflineSongMatcher.score("Jellyfish", "Yunomi", 260,
+            "ジェリーフィッシュ", "Yunomi", 235500, allowTitleMismatch = true))
+    }
+
+    @Test fun audioVerificationDoesNotAdmitUnrequestedLiveOrCoverVersions() {
+        assertNull(OfflineSongMatcher.score("Jellyfish (Live)", "Yunomi", 236,
+            "ジェリーフィッシュ", "Yunomi", 235500, allowTitleMismatch = true))
+        assertNull(OfflineSongMatcher.score("Jellyfish (Cover)", "Yunomi", 236,
+            "ジェリーフィッシュ", "Yunomi", 235500, allowTitleMismatch = true))
+    }
+
 }

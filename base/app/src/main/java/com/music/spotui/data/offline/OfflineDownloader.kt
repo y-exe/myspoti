@@ -347,10 +347,12 @@ object OfflineDownloader {
                 currentCoroutineContext().ensureActive()
                 if (r.upgradeLossless || !com.music.spotui.data.preferences.isYouTubeFallback(Graph.app)) throw e
                 Log.w(TAG, "Lossless unavailable; trying YouTube Music: ${e.javaClass.simpleName}")
-                val audio = YouTubeOfflineSource.fetch(meta.title, meta.artist, meta.durationMs, audioTmp)
+                val audio = YouTubeOfflineSource.fetch(meta.title, meta.artist, meta.durationMs, audioTmp,
+                    isrc = meta.isrc.orEmpty(), canVerifyAudio = previewFeatures != null,
+                    verify = { verify(Fetched("YouTube Music", false, extension = "original")) })
                     ?: throw Unavailable("no matching YouTube Music song")
                 Fetched("YouTube Music", false, extension = audio.extension, codec = audio.codec,
-                    bitrateKbps = audio.bitrateKbps, sourceUrl = audio.url).also { verify(it) }
+                    bitrateKbps = audio.bitrateKbps, sourceUrl = audio.url).also { it.verified = previewFeatures != null }
             }
             currentCoroutineContext().ensureActive()
 

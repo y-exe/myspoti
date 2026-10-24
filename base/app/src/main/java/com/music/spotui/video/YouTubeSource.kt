@@ -130,6 +130,29 @@ object YouTubeSource {
         }
     }
 
+    /** ISRC first, then text; rank official songs instead of accepting the first hit. */
+    internal fun offlineSongs(title: String, artist: String, durationMs: Long, isrc: String,
+        canVerifyAudio: Boolean): List<Hit> {
+        val found = linkedMapOf<String, Hit>()
+        var lastError: Exception? = null
+        for (query in OfflineSongMatcher.queries(title, artist, isrc)) {
+            val hits = try { search(query, YoutubeSearchQueryHandlerFactory.MUSIC_SONGS) }
+                catch (e: Exception) { checkInterrupted(); lastError = e; continue }
+            val ranked = hits.mapNotNull { h ->
+                OfflineSongMatcher.score(h.name, h.uploader, h.durationSec, title, artist, durationMs)?.let { h to it }
+            }.sortedByDescending { it.second }.map { it.first }
+            ranked.forEach { found.putIfAbsent(it.url, it) }
+            // A unique ISRC result may use a romanized title/artist. Only allow that
+            // relaxation when the downloader can confirm the actual audio by preview.
+            if (query == isrc && canVerifyAudio && hits.size == 1 &&
+                kotlin.math.abs(hits[0].durationSec * 1000 - durationMs) <= 3000)
+                found.putIfAbsent(hits[0].url, hits[0])
+            if (found.isNotEmpty()) break
+        }
+        if (found.isEmpty() && lastError != null) throw lastError
+        return found.values.take(3)
+    }
+
     private val excluded = Regex("""(?i)\b(lyrics?|paroles|cover|remix|reaction|karaok[eé]|slowed|sped ?up|nightcore|8d|instrumentale?|extended|tutorial|piano|guitar)\b""")
 
     /** Title words that must appear in a candidate's name (most of them). */

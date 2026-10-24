@@ -22,3 +22,5 @@ Run the upstream unit tests and debug build from `base/`:
 The device-only YouTube fallback test requires network access and deliberately exercises the extractor, file download and Android decoder metadata. Run it explicitly with the instrumentation class filter rather than as an offline CI test.
 
 The original GPL-3.0 license and upstream credits continue to apply. See README.md and THIRD_PARTY_NOTICES.md.
+
+Matching design references: spotDL's `spotdl/providers/audio/base.py`, `ytmusic.py`, and `spotdl/utils/matching.py` (MIT). This fork independently implements ISRC-first search, song-only candidates, title/artist/duration ranking, and exclusion of unrequested versions in Kotlin. A uniquely returned ISRC candidate with different script is accepted only when its actual audio can be compared with a preview. It does not assume that an ISRC search result is an exact ISRC match.

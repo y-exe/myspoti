@@ -22,15 +22,34 @@ internal object YouTubeOfflineSource {
         .filter { it.extension in setOf("webm", "m4a") && it.bitrateKbps > 0 }
         .sortedWith(compareByDescending<Candidate> { it.bitrateKbps }.thenBy { if (it.codec == "Opus") 0 else 1 })
 
-    suspend fun fetch(title: String, artist: String, durationMs: Long, out: File): Audio? {
+    suspend fun fetch(title: String, artist: String, durationMs: Long, out: File,
+        isrc: String = "", canVerifyAudio: Boolean = false, verify: suspend (File) -> Unit = {}): Audio? {
         if (durationMs <= 0) return null
-        val hit = runInterruptible(Dispatchers.IO) { YouTubeSource.findSong(title, artist, durationMs) } ?: return null
+        val hits = runInterruptible(Dispatchers.IO) {
+            YouTubeSource.offlineSongs(title, artist, durationMs, isrc, canVerifyAudio)
+        }
+        var last: Exception? = null
+        for (hit in hits) {
+            try {
+                val audio = fetchHit(hit, durationMs, out)
+                verify(out)
+                return audio
+            } catch (e: Exception) {
+                currentCoroutineContext().ensureActive()
+                last = e
+            }
+        }
+        if (last != null) throw last
+        return null
+    }
+
+    private suspend fun fetchHit(hit: YouTubeSource.Hit, durationMs: Long, out: File): Audio {
         var last: Exception? = null
         // Resolve again once if a cached stream URL has expired.
         for (fresh in listOf(false, true)) {
             currentCoroutineContext().ensureActive()
             val info = runInterruptible(Dispatchers.IO) { YouTubeSource.info(hit.url, fresh = fresh) }
-            if (kotlin.math.abs(info.duration * 1000 - durationMs) > 3000) return null
+            if (kotlin.math.abs(info.duration * 1000 - durationMs) > 3000) throw IOException("YouTube recording duration mismatch")
             val streams = info.audioStreams.filter {
                 it.deliveryMethod == DeliveryMethod.PROGRESSIVE_HTTP &&
                     it.content.startsWith("https://") && it.averageBitrate > 0 &&

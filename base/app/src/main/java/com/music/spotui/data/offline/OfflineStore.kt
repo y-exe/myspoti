@@ -34,14 +34,21 @@ data class OfflineTrack(
      * older index stays valid (and its files are not swept as strays).
      */
     val kind: String = KIND_MUSIC,
+    val codec: String = "",
+    val bitrateKbps: Int = 0,
+    val sourceUrl: String = "",
 ) {
     val isEpisode: Boolean get() = kind == KIND_PODCAST
+    val isYouTubeFallback: Boolean get() = source == "YouTube Music"
+    val qualityLabel: String get() = listOf(source.takeUnless { it.startsWith("http") }.orEmpty(), codec,
+        if (bitrateKbps > 0) "~$bitrateKbps kbps" else "").filter { it.isNotBlank() }.joinToString(" · ")
 
     fun toJson(): JSONObject = JSONObject()
         .put("id", trackId).put("title", title).put("artist", artist).put("album", album)
         .put("albumId", albumId).put("duration", durationMs).put("coverUrl", coverUrl)
         .put("file", file).put("cover", cover).put("source", source).put("verified", verified)
         .put("bytes", bytes).put("added", addedAt).put("kind", kind)
+        .put("codec", codec).put("bitrateKbps", bitrateKbps).put("sourceUrl", sourceUrl)
 
     companion object {
         const val KIND_MUSIC = "MUSIC"
@@ -55,6 +62,7 @@ data class OfflineTrack(
             addedAt = o.optLong("added"),
             // Absent in an index written before podcasts: those entries are all music.
             kind = o.optString("kind").ifBlank { KIND_MUSIC },
+            codec = o.optString("codec"), bitrateKbps = o.optInt("bitrateKbps"), sourceUrl = o.optString("sourceUrl"),
         )
     }
 }
@@ -140,9 +148,14 @@ object OfflineStore {
 
     fun add(t: OfflineTrack) {
         synchronized(lock) {
-            tracks[t.trackId] = t
+            val previous = tracks.put(t.trackId, t)
+            try {
+                writeIndex()
+            } catch (e: Exception) {
+                if (previous == null) tracks.remove(t.trackId) else tracks[t.trackId] = previous
+                throw e
+            }
             status.remove(t.trackId)
-            writeIndex()
         }
     }
 
@@ -233,6 +246,6 @@ object OfflineStore {
         val tmp = File(root, "index.json.tmp")
         tmp.writeText(a.toString())
         if (indexFile.exists() && readIndex(indexFile)?.complete == true) indexFile.copyTo(backupFile, overwrite = true)
-        tmp.renameTo(indexFile)
+        if (!tmp.renameTo(indexFile)) throw java.io.IOException("Could not commit offline index")
     }
 }

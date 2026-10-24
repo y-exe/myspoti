@@ -25,8 +25,8 @@ android {
     val version = (findProperty("appVersionName") as String?) ?: "2.0.1"
     val beta = findProperty("appVersionName") == null || version.contains("-")
     defaultConfig {
-        applicationId = if (beta) "app.myspoti" else "app.myspoti.stable"
-        manifestPlaceholders["appLabel"] = if (beta) "Myspoti Beta" else "Myspoti"
+        applicationId = "app.myspoti.yexe"
+        manifestPlaceholders["appLabel"] = "Myspoti Yexe"
         minSdk = 29
         targetSdk = 36
         // CI release builds pass the tag's version (-PappVersionName / -PappVersionCode).
@@ -72,7 +72,7 @@ android {
         debug {
             // Installs next to the release apps (own data, own sign-in).
             applicationIdSuffix = ".dev"
-            manifestPlaceholders["appLabel"] = "Myspoti dev"
+            manifestPlaceholders["appLabel"] = "Myspoti Yexe dev"
         }
         release {
             // Real key when provided (CI releases); otherwise the debug key, so a local

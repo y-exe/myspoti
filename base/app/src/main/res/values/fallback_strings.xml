@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="youtube_fallback_title">YouTube Music fallback</string>
+    <string name="youtube_fallback_detail">If lossless sources fail, keep the matching song as original AAC or Opus. No re-encoding; quality depends on the source.</string>
+    <string name="downloads_sources_fallback">Lossless first, with optional YouTube Music audio. Source and quality are shown for each song.</string>
+    <string name="downloads_upgrade_lossless">Try lossless again for YouTube songs</string>
+    <string name="download_metadata_match">Metadata matched</string>
+</resources>

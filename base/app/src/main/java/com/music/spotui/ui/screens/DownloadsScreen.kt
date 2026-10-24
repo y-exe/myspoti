@@ -70,7 +70,7 @@ fun DownloadsScreen(navController: NavController) {
     val title = stringResource(R.string.collection_downloaded)
     // Snapshot reads: the list follows downloads as they finish.
     val tracks = OfflineStore.tracks.values.sortedByDescending { it.addedAt }
-    val waiting = OfflineDownloader.requests.values.filter { !OfflineStore.isDownloaded(it.trackId) }
+    val waiting = OfflineDownloader.requests.values.filter { it.upgradeLossless || !OfflineStore.isDownloaded(it.trackId) }
     // A25: only queued or running songs can be stopped; a failed one has nothing left to cancel.
     val stoppable = waiting.count {
         val s = OfflineStore.status[it.trackId]
@@ -114,7 +114,11 @@ fun DownloadsScreen(navController: NavController) {
                     val size = Formatter.formatShortFileSize(context, OfflineStore.totalBytes())
                     Text(pluralStringResource(R.plurals.local_files_count, n, n) + " · " + stringResource(R.string.downloads_size, size),
                         color = Color(0xFFB3B3B3), fontSize = 14.sp, modifier = Modifier.padding(top = 4.dp))
-                    Text(stringResource(R.string.downloads_source), color = Color(0xFFB3B3B3), fontSize = 12.sp, modifier = Modifier.padding(top = 4.dp))
+                    Text(stringResource(R.string.downloads_sources_fallback), color = Color(0xFFB3B3B3), fontSize = 12.sp, modifier = Modifier.padding(top = 4.dp))
+                    if (tracks.any { it.isYouTubeFallback }) {
+                        Text(stringResource(R.string.downloads_upgrade_lossless), color = com.music.spotui.ui.theme.AppAccent,
+                            modifier = Modifier.padding(vertical = 12.dp).pressable { OfflineDownloader.upgradeYouTubeDownloads() })
+                    }
                     Row(Modifier.fillMaxWidth().padding(vertical = 12.dp), verticalAlignment = Alignment.CenterVertically) {
                         Spacer(Modifier.weight(1f))
                         Icon(painterResource(R.drawable.ic_player_shuffle), stringResource(R.string.play_mode_item_shuffle_title), tint = Color.White,
@@ -220,6 +224,9 @@ fun DownloadsScreen(navController: NavController) {
                             Spacer(Modifier.width(6.dp))
                             Text(t.artist, color = Color(0xFFB3B3B3), fontSize = 13.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
                         }
+                        if (t.qualityLabel.isNotBlank()) Text(t.qualityLabel +
+                            if (t.isYouTubeFallback && !t.verified) " · " + stringResource(R.string.download_metadata_match) else "",
+                            color = Color(0xFFB3B3B3), fontSize = 11.sp, maxLines = 2, overflow = TextOverflow.Ellipsis)
                     }
                     Icon(Icons.Default.MoreVert, stringResource(R.string.content_description_context_menu), tint = Color.White.copy(alpha = 0.7f),
                         modifier = Modifier.size(24.dp).pressable(0.96f) { menuSong = OfflineStore.toSong(t) })

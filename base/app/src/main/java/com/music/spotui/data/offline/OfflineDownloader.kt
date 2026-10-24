@@ -67,10 +67,11 @@ object OfflineDownloader {
         val coverUrl: String,
         /** The quality chosen for this download ([DownloadQuality.name]); empty = the setting. */
         val quality: String = "",
+        val upgradeLossless: Boolean = false,
     ) {
         fun toJson(): JSONObject = JSONObject().put("id", trackId).put("title", title).put("artist", artist)
             .put("album", album).put("albumId", albumId).put("duration", durationMs).put("cover", coverUrl)
-            .put("quality", quality)
+            .put("quality", quality).put("upgradeLossless", upgradeLossless)
 
         companion object {
             fun of(s: SongsModel) = Request(
@@ -79,7 +80,7 @@ object OfflineDownloader {
             )
             fun fromJson(o: JSONObject) = Request(
                 o.getString("id"), o.optString("title"), o.optString("artist"), o.optString("album"),
-                o.optString("albumId"), o.optLong("duration"), o.optString("cover"), o.optString("quality"),
+                o.optString("albumId"), o.optLong("duration"), o.optString("cover"), o.optString("quality"), o.optBoolean("upgradeLossless"),
             )
         }
     }
@@ -180,7 +181,8 @@ object OfflineDownloader {
             list.filter { r ->
                 // Last guard before the lossless path, whatever the caller (resume, retry, list).
                 !isEpisodeKey(r.trackId) &&
-                    !OfflineStore.isDownloaded(r.trackId) && pending.putIfAbsent(r.trackId, r) == null
+                    (!OfflineStore.isDownloaded(r.trackId) || (r.upgradeLossless && OfflineStore.tracks[r.trackId]?.isYouTubeFallback == true)) &&
+                    pending.putIfAbsent(r.trackId, r) == null
             }.also { if (it.isNotEmpty()) savePending() }
         }
         if (added.isEmpty()) return
@@ -221,6 +223,15 @@ object OfflineDownloader {
     fun retry(trackId: String) {
         val r = requests[trackId] ?: return
         enqueueAll(listOf(r))
+    }
+
+    /** Keep the existing audio until a verified lossless replacement is committed. */
+    fun upgradeYouTubeDownloads() {
+        val list = OfflineStore.list().filter { it.isYouTubeFallback }.map {
+            Request(it.trackId, it.title, it.artist, it.album, it.albumId, it.durationMs, it.coverUrl,
+                quality = "CD", upgradeLossless = true)
+        }
+        enqueueAll(list)
     }
 
     /** Removes the song: the file if downloaded, else its download. */
@@ -289,7 +300,8 @@ object OfflineDownloader {
         if (!isLosslessEnabled(Graph.app)) throw Unavailable("lossless downloads are off")
         val quality = qualityOf(r)
         val tmp = OfflineStore.tmpDir
-        val audioTmp = File(tmp, "${r.trackId}.flacpart")
+        val storageId = if (r.upgradeLossless) "${r.trackId}-${System.nanoTime()}" else r.trackId
+        val audioTmp = File(tmp, "$storageId.part")
         val previewTmp = File(tmp, "${r.trackId}.preview")
         try {
             val meta = spotifyMeta(r)
@@ -308,35 +320,52 @@ object OfflineDownloader {
             }
             Log.i(TAG, "${meta.title}: isrc=${meta.isrc ?: "-"} preview=${if (previewFeatures != null) "ok" else if (previewLink != null) "unusable" else "none"}")
 
-            // ── Lossless resolve: gated SpotiFLAC first, then the community backends.
-            val file = resolveAndFetch(r, meta, audioTmp, quality == com.music.spotui.data.preferences.DownloadQuality.HI_RES,
-                small = quality == com.music.spotui.data.preferences.DownloadQuality.SMALL)
-                ?: throw Unavailable("no lossless match")
-            currentCoroutineContext().ensureActive()
-
-            // ── Verification before the file is kept.
-            if (previewFeatures != null) {
-                val score = checkLock.withLock {
-                    val full = runInterruptible(Dispatchers.Default) { AudioAlign.features(AudioAlign.decode(audioTmp)) }
-                    val map = AudioAlign.align(previewFeatures, full)
-                    if (map.segments.isEmpty()) 0.0 else map.score
+            suspend fun verify(file: Fetched) {
+                currentCoroutineContext().ensureActive()
+                if (previewFeatures != null) {
+                    val score = checkLock.withLock {
+                        val full = runInterruptible(Dispatchers.Default) { AudioAlign.features(AudioAlign.decode(audioTmp)) }
+                        val map = AudioAlign.align(previewFeatures, full)
+                        if (map.segments.isEmpty()) 0.0 else map.score
+                    }
+                    if (score < MIN_SCORE) throw Unavailable("audio did not match the recording's preview")
+                    file.verified = true
+                } else if (!file.isrcMatched && file.extension == null) {
+                    throw Unavailable("no preview and no ISRC match")
                 }
-                Log.i(TAG, "${meta.title}: ${file.provider} score ${"%.2f".format(score)}")
-                if (score < MIN_SCORE) throw Unavailable("the lossless file did not match the recording's preview")
-                file.verified = true
-            } else if (!file.isrcMatched) {
-                // No preview to compare with: only an exact ISRC match is trusted.
-                throw Unavailable("no preview and no ISRC match")
+                // A YouTube song without a preview is metadata-matched, not audio-verified.
             }
 
+            val file = try {
+                val lossless = resolveAndFetch(r, meta, audioTmp,
+                    quality == com.music.spotui.data.preferences.DownloadQuality.HI_RES,
+                    small = !r.upgradeLossless && quality == com.music.spotui.data.preferences.DownloadQuality.SMALL)
+                    ?: throw IOException("Lossless sources did not return a usable recording")
+                verify(lossless)
+                lossless
+            } catch (e: Exception) {
+                currentCoroutineContext().ensureActive()
+                if (r.upgradeLossless || !com.music.spotui.data.preferences.isYouTubeFallback(Graph.app)) throw e
+                Log.w(TAG, "Lossless unavailable; trying YouTube Music: ${e.javaClass.simpleName}")
+                val audio = YouTubeOfflineSource.fetch(meta.title, meta.artist, meta.durationMs, audioTmp)
+                    ?: throw Unavailable("no matching YouTube Music song")
+                Fetched("YouTube Music", false, extension = audio.extension, codec = audio.codec,
+                    bitrateKbps = audio.bitrateKbps, sourceUrl = audio.url).also { verify(it) }
+            }
+            currentCoroutineContext().ensureActive()
+
             val out: File
-            if (file.aac) {
+            if (file.extension != null) {
+                // Preserve YouTube's original AAC/Opus bytes, including for "Smallest".
+                out = File(OfflineStore.audioDir, "$storageId.${file.extension}")
+                if (!audioTmp.renameTo(out)) throw IOException("could not move the file")
+            } else if (file.aac) {
                 // Tidal's own AAC: already small, kept as it was served.
-                out = File(OfflineStore.audioDir, "${r.trackId}.m4a")
+                out = File(OfflineStore.audioDir, "$storageId.m4a")
                 if (!audioTmp.renameTo(out)) throw IOException("could not move the file")
             } else if (quality == com.music.spotui.data.preferences.DownloadQuality.SMALL) {
                 // "Smallest": the checked FLAC becomes AAC, encoded on the phone.
-                out = File(OfflineStore.audioDir, "${r.trackId}.m4a")
+                out = File(OfflineStore.audioDir, "$storageId.m4a")
                 val aacTmp = File(OfflineStore.tmpDir, "${r.trackId}.m4apart")
                 try {
                     // Not under checkLock: encoding is long, the other downloads must not queue behind it.
@@ -346,7 +375,7 @@ object OfflineDownloader {
                     aacTmp.delete()
                 }
             } else {
-                out = File(OfflineStore.audioDir, "${r.trackId}.flac")
+                out = File(OfflineStore.audioDir, "$storageId.flac")
                 if (!audioTmp.renameTo(out)) throw IOException("could not move the file")
             }
             // The audio is complete on disk from here on: "stop all" must not interrupt this last
@@ -362,6 +391,8 @@ object OfflineDownloader {
                     trackId = r.trackId, title = meta.title, artist = meta.artist, album = meta.album,
                     albumId = meta.albumId, durationMs = meta.durationMs, coverUrl = meta.coverUrl,
                     file = out.name, cover = cover, source = file.provider, verified = file.verified,
+                    codec = file.codec.ifBlank { if (out.extension == "flac") "FLAC" else "AAC" },
+                    bitrateKbps = file.bitrateKbps, sourceUrl = file.sourceUrl,
                     bytes = out.length(), addedAt = System.currentTimeMillis(),
                 )
             }
@@ -370,7 +401,8 @@ object OfflineDownloader {
         }
     }
 
-    private class Fetched(val provider: String, val isrcMatched: Boolean, val aac: Boolean = false) {
+    private class Fetched(val provider: String, val isrcMatched: Boolean, val aac: Boolean = false,
+        val extension: String? = null, val codec: String = "", val bitrateKbps: Int = 0, val sourceUrl: String = "") {
         var verified = false
     }
 

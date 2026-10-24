@@ -6,4 +6,6 @@
     <string name="downloads_upgrade_lossless">YouTubeの曲をロスレスで再取得</string>
     <string name="download_metadata_match">曲情報で照合</string>
     <string name="downloads_retry_failed">取得できなかった曲を再試行</string>
+    <string name="downloads_notification_title">曲をダウンロード中</string>
+    <string name="downloads_notification_remaining">残り%1$d曲</string>
 </resources>

@@ -6,4 +6,6 @@
     <string name="downloads_upgrade_lossless">Try lossless again for YouTube songs</string>
     <string name="download_metadata_match">Metadata matched</string>
     <string name="downloads_retry_failed">Retry unsuccessful downloads</string>
+    <string name="downloads_notification_title">Saving music</string>
+    <string name="downloads_notification_remaining">%1$d songs remaining</string>
 </resources>

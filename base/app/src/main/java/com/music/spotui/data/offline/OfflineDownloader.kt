@@ -186,12 +186,15 @@ object OfflineDownloader {
             }.also { if (it.isNotEmpty()) savePending() }
         }
         if (added.isEmpty()) return
+        OfflineDownloadService.start(Graph.app)
         scope.launch(Dispatchers.Main) {
             added.forEach { requests[it.trackId] = it; OfflineStore.status[it.trackId] = OfflineStatus.Queued }
         }
         start()
         added.forEach { queue.trySend(it) }
     }
+
+    internal fun pendingCount(): Int = synchronized(pending) { pending.size }
 
     /** Stops a queued or running download (and forgets a failed one). */
     fun cancel(trackId: String) {

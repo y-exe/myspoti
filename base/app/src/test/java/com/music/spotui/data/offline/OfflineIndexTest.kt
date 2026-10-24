@@ -50,4 +50,30 @@ class OfflineIndexTest {
         assertFalse(File(root, "audio/b.m4a").exists())
         assertTrue(File(root, "audio/a.m4a").exists())
     }
+    @Test fun failedUpgradeIndexWriteKeepsThePreviousTrackAndAudio() {
+        val root = folder(JSONArray().put(entry("a").put("source", "YouTube Music")).toString(), "a")
+        OfflineStore.load(root)
+        val before = OfflineStore.tracks.getValue("a")
+        File(root, "index.json.tmp").mkdir()
+        try {
+            OfflineStore.add(before.copy(file = "a-upgrade.flac", source = "Qobuz"))
+            org.junit.Assert.fail("An uncommitted index must fail the upgrade")
+        } catch (_: java.io.IOException) { }
+        assertEquals(before, OfflineStore.tracks["a"])
+        assertTrue(File(root, "audio/a.m4a").isFile)
+        assertEquals("YouTube Music", OfflineTrack.fromJson(JSONArray(File(root, "index.json").readText()).getJSONObject(0)).source)
+    }
+
+    @Test fun committedUpgradeKeepsTheOldAudioForIndexBackupRecovery() {
+        val root = folder(JSONArray().put(entry("a").put("source", "YouTube Music")).toString(), "a")
+        OfflineStore.load(root)
+        val before = OfflineStore.tracks.getValue("a")
+        File(root, "audio/a-upgrade.flac").writeText("flac")
+        OfflineStore.add(before.copy(file = "a-upgrade.flac", source = "Qobuz"))
+        assertEquals("Qobuz", OfflineStore.tracks.getValue("a").source)
+        assertTrue(File(root, "audio/a.m4a").isFile)
+        assertTrue(File(root, "audio/a-upgrade.flac").isFile)
+        assertEquals("a.m4a", OfflineTrack.fromJson(JSONArray(File(root, "index.json.bak").readText()).getJSONObject(0)).file)
+    }
+
 }

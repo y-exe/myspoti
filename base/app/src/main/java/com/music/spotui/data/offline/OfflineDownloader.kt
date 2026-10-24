@@ -350,7 +350,7 @@ object OfflineDownloader {
                 val audio = YouTubeOfflineSource.fetch(meta.title, meta.artist, meta.durationMs, audioTmp,
                     isrc = meta.isrc.orEmpty(), canVerifyAudio = previewFeatures != null,
                     verify = { verify(Fetched("YouTube Music", false, extension = "original")) })
-                    ?: throw Unavailable("no matching YouTube Music song")
+                    ?: throw IOException("Lossless lookup failed and YouTube Music found no matching song", e)
                 Fetched("YouTube Music", false, extension = audio.extension, codec = audio.codec,
                     bitrateKbps = audio.bitrateKbps, sourceUrl = audio.url).also { it.verified = previewFeatures != null }
             }

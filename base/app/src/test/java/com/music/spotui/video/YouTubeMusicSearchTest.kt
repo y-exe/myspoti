@@ -25,4 +25,24 @@ class YouTubeMusicSearchTest {
         val json = fixture().toString().replace("3:46", "")
         assertTrue(YouTubeMusicSearch.parse(JSONObject(json)).isEmpty())
     }
+    @Test fun plainTextArtistWithoutAnArtistPageIsRetained() {
+        val json = fixture()
+        val row = json.getJSONArray("contents").getJSONObject(0).getJSONObject("musicResponsiveListItemRenderer")
+        val runs = row.getJSONArray("flexColumns").getJSONObject(1)
+            .getJSONObject("musicResponsiveListItemFlexColumnRenderer").getJSONObject("text").getJSONArray("runs")
+        runs.getJSONObject(0).remove("navigationEndpoint")
+        runs.getJSONObject(0).put("text", "桜高軽音部")
+        assertEquals("桜高軽音部", YouTubeMusicSearch.parse(json).single().uploader)
+    }
+
+    @Test fun durationIsNotUsedAsAnArtistWhenArtistDataIsMissing() {
+        val json = fixture()
+        val row = json.getJSONArray("contents").getJSONObject(0).getJSONObject("musicResponsiveListItemRenderer")
+        val runs = row.getJSONArray("flexColumns").getJSONObject(1)
+            .getJSONObject("musicResponsiveListItemFlexColumnRenderer").getJSONObject("text").getJSONArray("runs")
+        runs.getJSONObject(0).remove("navigationEndpoint")
+        runs.getJSONObject(0).put("text", "3:46")
+        assertTrue(YouTubeMusicSearch.parse(json).isEmpty())
+    }
+
 }

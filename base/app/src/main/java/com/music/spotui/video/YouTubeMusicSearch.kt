@@ -66,6 +66,15 @@ internal object YouTubeMusicSearch {
                             if (text.matches(Regex("\\d{1,3}:\\d{2}(?::\\d{2})?")))
                                 seconds = text.split(':').fold(0L) { total, part -> total * 60 + part.toLong() }
                         }
+                        // Some real song artists are plain text without an artist page
+                        // (for example 桜高軽音部). ytmusicapi also reads this first field.
+                        if (artists.isEmpty()) {
+                            val firstArtist = metadata.optJSONObject(0)
+                            val plain = firstArtist?.optString("text").orEmpty().trim()
+                            if (firstArtist?.has("navigationEndpoint") == false && plain.isNotBlank() &&
+                                !plain.contains('•') && !plain.matches(Regex("\\d{1,3}:\\d{2}(?::\\d{2})?")))
+                                artists += plain
+                        }
                         if (type == "MUSIC_VIDEO_TYPE_ATV" && id.matches(Regex("[A-Za-z0-9_-]{11}")) &&
                             name.isNotBlank() && artists.isNotEmpty() && seconds > 0)
                             found[id] = YouTubeSource.Hit("https://www.youtube.com/watch?v=$id", name, artists.joinToString(", "), seconds)

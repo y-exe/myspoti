@@ -31,7 +31,7 @@ internal object YouTubeOfflineSource {
         var last: Exception? = null
         for (hit in hits) {
             try {
-                val audio = fetchHit(hit, durationMs, out)
+                val audio = fetchHit(hit, durationMs, out, if (canVerifyAudio) 10000 else 3000)
                 verify(out)
                 return audio
             } catch (e: Exception) {
@@ -43,13 +43,13 @@ internal object YouTubeOfflineSource {
         return null
     }
 
-    private suspend fun fetchHit(hit: YouTubeSource.Hit, durationMs: Long, out: File): Audio {
+    private suspend fun fetchHit(hit: YouTubeSource.Hit, durationMs: Long, out: File, toleranceMs: Long): Audio {
         var last: Exception? = null
         // Resolve again once if a cached stream URL has expired.
         for (fresh in listOf(false, true)) {
             currentCoroutineContext().ensureActive()
             val info = runInterruptible(Dispatchers.IO) { YouTubeSource.info(hit.url, fresh = fresh) }
-            if (kotlin.math.abs(info.duration * 1000 - durationMs) > 3000) throw IOException("YouTube recording duration mismatch")
+            if (kotlin.math.abs(info.duration * 1000 - durationMs) > toleranceMs) throw IOException("YouTube recording duration mismatch")
             val streams = info.audioStreams.filter {
                 it.deliveryMethod == DeliveryMethod.PROGRESSIVE_HTTP &&
                     it.content.startsWith("https://") && it.averageBitrate > 0 &&

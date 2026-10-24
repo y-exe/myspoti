@@ -145,10 +145,10 @@ object YouTubeSource {
                 // A translated title (ジェリーフィッシュ / Jellyfish) can only be a
                 // candidate if the downloader will verify its actual audio by preview.
                 OfflineSongMatcher.score(hit.name, hit.uploader, hit.durationSec, title, artist,
-                    durationMs, allowTitleMismatch = canVerifyAudio)?.let { keep(hit, it) }
+                    durationMs, canVerifyAudio = canVerifyAudio)?.let { keep(hit, it) }
             }
             if (query == isrc && canVerifyAudio && hits.size == 1 &&
-                kotlin.math.abs(hits[0].durationSec * 1000 - durationMs) <= 3000)
+                kotlin.math.abs(hits[0].durationSec * 1000 - durationMs) <= 10000)
                 keep(hits[0], 0.5)
         }
         if (found.isEmpty() && lastError != null) throw lastError

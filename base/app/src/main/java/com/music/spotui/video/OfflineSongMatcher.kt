@@ -24,14 +24,14 @@ internal object OfflineSongMatcher {
         return queries.filter { it.isNotBlank() }.distinct()
     }
 
-    fun score(name: String, uploader: String, seconds: Long, wanted: String, artists: String, durationMs: Long, allowTitleMismatch: Boolean = false): Double? {
-        if (durationMs <= 0 || seconds <= 0 || abs(seconds * 1000 - durationMs) > 3000) return null
+    fun score(name: String, uploader: String, seconds: Long, wanted: String, artists: String, durationMs: Long, canVerifyAudio: Boolean = false): Double? {
+        if (durationMs <= 0 || seconds <= 0 || abs(seconds * 1000 - durationMs) > if (canVerifyAudio) 10000 else 3000) return null
         val target = normalized(wanted)
         if (versions.findAll(normalized(name)).any { it.value !in target }) return null
         val a = title(name); val b = title(wanted)
         if (a.isBlank() || b.isBlank()) return null
         val nameScore = similarity(a, b)
-        if (nameScore < 0.85 && !allowTitleMismatch) return null
+        if (nameScore < 0.85 && !canVerifyAudio) return null
         val channel = artist(uploader)
         val names = artists.split(',').map(::artist).filter { it.isNotBlank() }
         val artistScore = names.maxOfOrNull { n ->

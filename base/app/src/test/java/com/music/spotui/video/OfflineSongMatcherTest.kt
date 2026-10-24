@@ -43,18 +43,27 @@ class OfflineSongMatcherTest {
         assertNull(OfflineSongMatcher.score("Jellyfish (feat. Roller Girl)", "Yunomi", 236,
             "ジェリーフィッシュ", "Yunomi", 235500))
         assertNotNull(OfflineSongMatcher.score("Jellyfish (feat. Roller Girl)", "Yunomi", 236,
-            "ジェリーフィッシュ", "Yunomi", 235500, allowTitleMismatch = true))
+            "ジェリーフィッシュ", "Yunomi", 235500, canVerifyAudio = true))
         assertNull(OfflineSongMatcher.score("Jellyfish", "Another Artist", 236,
-            "ジェリーフィッシュ", "Yunomi", 235500, allowTitleMismatch = true))
+            "ジェリーフィッシュ", "Yunomi", 235500, canVerifyAudio = true))
         assertNull(OfflineSongMatcher.score("Jellyfish", "Yunomi", 260,
-            "ジェリーフィッシュ", "Yunomi", 235500, allowTitleMismatch = true))
+            "ジェリーフィッシュ", "Yunomi", 235500, canVerifyAudio = true))
     }
 
     @Test fun audioVerificationDoesNotAdmitUnrequestedLiveOrCoverVersions() {
         assertNull(OfflineSongMatcher.score("Jellyfish (Live)", "Yunomi", 236,
-            "ジェリーフィッシュ", "Yunomi", 235500, allowTitleMismatch = true))
+            "ジェリーフィッシュ", "Yunomi", 235500, canVerifyAudio = true))
         assertNull(OfflineSongMatcher.score("Jellyfish (Cover)", "Yunomi", 236,
-            "ジェリーフィッシュ", "Yunomi", 235500, allowTitleMismatch = true))
+            "ジェリーフィッシュ", "Yunomi", 235500, canVerifyAudio = true))
+    }
+
+    @Test fun aSmallOfficialPaddingDifferenceRequiresAudioVerification() {
+        assertNull(OfflineSongMatcher.score("Gravitation", "黒崎真音", 267,
+            "Gravitation", "黒崎真音", 262985))
+        assertNotNull(OfflineSongMatcher.score("Gravitation", "黒崎真音", 267,
+            "Gravitation", "黒崎真音", 262985, canVerifyAudio = true))
+        assertNull(OfflineSongMatcher.score("Gravitation", "黒崎真音", 280,
+            "Gravitation", "黒崎真音", 262985, canVerifyAudio = true))
     }
 
 }

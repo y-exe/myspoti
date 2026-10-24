@@ -70,6 +70,7 @@ android {
 
     buildTypes {
         debug {
+            signingConfig = signingConfigs.getByName(if (hasReleaseKey) "release" else "debug")
             // Installs next to the release apps (own data, own sign-in).
             applicationIdSuffix = ".dev"
             manifestPlaceholders["appLabel"] = "Myspoti Yexe dev"

@@ -32,6 +32,25 @@ jobs:
 
       - uses: gradle/actions/setup-gradle@v6
 
+      # A fork-owned persistent key lets preview builds update without losing app data.
+      # Fork PRs without these secrets keep the standard disposable debug signature.
+      - name: Development signing key
+        env:
+          DEV_KEYSTORE_BASE64: ${{ secrets.MYSPOTI_DEV_KEYSTORE_BASE64 }}
+          DEV_KEYSTORE_PASSWORD: ${{ secrets.MYSPOTI_DEV_KEYSTORE_PASSWORD }}
+          DEV_KEY_ALIAS: ${{ secrets.MYSPOTI_DEV_KEY_ALIAS }}
+          DEV_KEY_PASSWORD: ${{ secrets.MYSPOTI_DEV_KEY_PASSWORD }}
+        run: |
+          if [ -n "$DEV_KEYSTORE_BASE64" ]; then
+            echo "$DEV_KEYSTORE_BASE64" | base64 -d > "$RUNNER_TEMP/myspoti-dev.p12"
+            {
+              echo "MYSPOTI_KEYSTORE=$RUNNER_TEMP/myspoti-dev.p12"
+              echo "MYSPOTI_KEYSTORE_PASSWORD=$DEV_KEYSTORE_PASSWORD"
+              echo "MYSPOTI_KEY_ALIAS=$DEV_KEY_ALIAS"
+              echo "MYSPOTI_KEY_PASSWORD=$DEV_KEY_PASSWORD"
+            } >> "$GITHUB_ENV"
+          fi
+
       # App unit tests, plus the JVM modules (API contracts, ad block, offline index, GraphQL
       # errors). The live tests in host-cdp skip themselves without a browser to drive.
       - name: Unit tests

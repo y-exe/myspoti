@@ -412,7 +412,7 @@ object LocalPlayer {
         // A queued song that started (or was skipped past) leaves the queue: it plays from there now.
         if (t in queued) playingQueued = t
         exo?.currentMediaItemIndex?.let { cur -> for (i in 0..minOf(cur, tracks.lastIndex)) queued -= tracks[i] }
-        SongPlayer.onLocalState(t, exo?.playWhenReady == true, position(), duration())
+        SongPlayer.onLocalState(t, exo?.let { it.playWhenReady && it.playbackState != Player.STATE_ENDED } == true, position(), duration())
         SongPlayer.onLocalQueue(t, upcoming(), queuedCount())
     }
 }

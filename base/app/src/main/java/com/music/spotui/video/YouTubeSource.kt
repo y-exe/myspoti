@@ -130,6 +130,35 @@ object YouTubeSource {
         }
     }
 
+    /** ISRC first, then text; rank official songs instead of accepting the first hit. */
+    internal fun offlineSongs(title: String, artist: String, durationMs: Long, isrc: String,
+        canVerifyAudio: Boolean, videos: Boolean = false, userVideos: Boolean = false): List<Hit> {
+        if (userVideos && !canVerifyAudio) return emptyList()
+        val found = linkedMapOf<String, Pair<Hit, Double>>()
+        var lastError: Exception? = null
+        fun keep(hit: Hit, score: Double) {
+            if (score > (found[hit.url]?.second ?: -1.0)) found[hit.url] = hit to score
+        }
+        for (query in OfflineSongMatcher.queries(title, artist, isrc)) {
+            val hits = try {
+                if (videos) YouTubeMusicSearch.videos(query, "$title $artist", userVideos)
+                else YouTubeMusicSearch.songs(query, "$title $artist")
+            }
+                catch (e: Exception) { checkInterrupted(); lastError = e; continue }
+            for (hit in hits) {
+                // A translated title (ジェリーフィッシュ / Jellyfish) can only be a
+                // candidate if the downloader will verify its actual audio by preview.
+                OfflineSongMatcher.score(hit.name, hit.uploader, hit.durationSec, title, artist,
+                    durationMs, canVerifyAudio = canVerifyAudio, musicVideo = videos, allowTitleCredit = userVideos)?.let { keep(hit, it) }
+            }
+            if (!videos && query == isrc && canVerifyAudio && hits.size == 1 &&
+                kotlin.math.abs(hits[0].durationSec * 1000 - durationMs) <= 10000)
+                keep(hits[0], 0.5)
+        }
+        if (found.isEmpty() && lastError != null) throw lastError
+        return found.values.sortedByDescending { it.second }.map { it.first }.take(3)
+    }
+
     private val excluded = Regex("""(?i)\b(lyrics?|paroles|cover|remix|reaction|karaok[eé]|slowed|sped ?up|nightcore|8d|instrumentale?|extended|tutorial|piano|guitar)\b""")
 
     /** Title words that must appear in a candidate's name (most of them). */

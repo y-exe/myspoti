@@ -1,0 +1,19 @@
+{
+  "id": "net.yexe.myspoti.spotiflac",
+  "name": "SpotiFLAC",
+  "version": "1.0.1",
+  "versionCode": 2,
+  "author": "y-exe",
+  "description": "Verified SpotiFLAC download sessions with exact ISRC matching. Original files only.",
+  "actions": [
+    { "name": "download.source", "why": "Find the exact recording for offline downloads" },
+    { "name": "network", "hosts": ["api.zarz.moe", "tidal.com", "www.qobuz.com"], "why": "Find recordings and request download tickets" },
+    { "name": "storage", "why": "Keep this extension's verified sessions" },
+    { "name": "webview.auth", "why": "Complete the provider's verification when a session expires" },
+    { "name": "settings.page", "why": "Verify a download provider" }
+  ],
+  "settings": [
+    { "key": "tidal", "type": "button", "label": "Tidal", "description": "Verify the SpotiFLAC Tidal session" },
+    { "key": "qobuz", "type": "button", "label": "Qobuz", "description": "Verify the SpotiFLAC Qobuz session" }
+  ]
+}

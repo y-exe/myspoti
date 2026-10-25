@@ -13,6 +13,10 @@ private const val KEY_ENABLED = "enabled"
 private const val KEY_SMALL = "small_aac"
 private const val KEY_ASK = "ask_each_time"
 
+/** Lossless first, with optional original-format YouTube Music audio as a fallback. */
+fun isYouTubeFallback(context: Context): Boolean = prefs(context).getBoolean("youtube_fallback", true)
+fun setYouTubeFallback(context: Context, on: Boolean) = prefs(context).edit().putBoolean("youtube_fallback", on).apply()
+
 /**
  * Hi-res downloads (24-bit when the source has it: bigger files, ~3× a CD-quality FLAC).
  * Default off: CD quality is asked for.

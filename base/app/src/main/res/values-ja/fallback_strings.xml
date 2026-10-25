@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="youtube_fallback_title">YouTube Musicで補完</string>
+    <string name="youtube_fallback_detail">ロスレス音源を取得できない曲は、AAC・Opusを再圧縮せず保存します。音質は取得元によって異なります。</string>
+</resources>

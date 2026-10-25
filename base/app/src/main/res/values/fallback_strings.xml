@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="youtube_fallback_title">YouTube Music fallback</string>
+    <string name="youtube_fallback_detail">If lossless sources fail, keep the matching song as original AAC or Opus. No re-encoding; quality depends on the source.</string>
+</resources>

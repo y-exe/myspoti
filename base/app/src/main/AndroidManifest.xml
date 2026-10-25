@@ -21,6 +21,8 @@
         android:name="android.permission.WRITE_EXTERNAL_STORAGE"
         android:maxSdkVersion="28" />
 
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC" />
+
     <application
         android:name="app.myspoti.MyspotiApplication"
         android:allowBackup="false"
@@ -224,6 +226,10 @@
                 android:name="android.appwidget.provider"
                 android:resource="@xml/widget_now_playing_info" />
         </receiver>
+        <service
+            android:name="com.music.spotui.data.offline.OfflineDownloadService"
+            android:exported="false"
+            android:foregroundServiceType="dataSync" />
     </application>
 
 </manifest>

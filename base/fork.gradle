@@ -1,0 +1,15 @@
+// Fork identity and signing stay separate from upstream's Android configuration.
+android {
+    defaultConfig {
+        applicationId = 'net.yexe.myspoti'
+        manifestPlaceholders.appLabel = 'Myspoti'
+    }
+    buildTypes.all {
+        applicationIdSuffix = null
+        manifestPlaceholders.appLabel = 'Myspoti'
+    }
+    def forkSigning = signingConfigs.findByName('release')
+    if (forkSigning?.storeFile != null) {
+        buildTypes.debug.signingConfig = forkSigning
+    }
+}

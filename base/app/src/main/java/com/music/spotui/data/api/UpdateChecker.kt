@@ -31,14 +31,16 @@ object UpdateChecker {
         val release = runCatching {
             // Stable builds follow "latest", which never includes pre-releases. A beta build
             // also takes the newer betas, then the release they lead to.
-            val url = if (isBeta) "https://api.github.com/repos/$repo/releases?per_page=10" else "https://api.github.com/repos/$repo/releases/latest"
+            // The fork keeps one application id and one Latest release, including upstream betas.
+            val betaChannel = isBeta && !BuildConfig.VERSION_NAME.endsWith("-yexe")
+            val url = if (betaChannel) "https://api.github.com/repos/$repo/releases?per_page=10" else "https://api.github.com/repos/$repo/releases/latest"
             val request = Request.Builder().url(url).header("Accept", "application/vnd.github+json").build()
             http.newCall(request).execute().use { r ->
                 if (!r.isSuccessful) return@runCatching null
                 val text = r.body.string()
-                val list = if (isBeta) org.json.JSONArray(text).let { a -> (0 until a.length()).map { a.getJSONObject(it) } } else listOf(JSONObject(text))
+                val list = if (betaChannel) org.json.JSONArray(text).let { a -> (0 until a.length()).map { a.getJSONObject(it) } } else listOf(JSONObject(text))
                 // Betas and releases are two apps: each one is offered its own channel only.
-                list.filter { !it.optBoolean("draft") && (!isBeta || it.optBoolean("prerelease")) }
+                list.filter { !it.optBoolean("draft") && (!betaChannel || it.optBoolean("prerelease")) }
                     .map { Release(it.getString("tag_name").removePrefix("v"), it.getString("html_url"), cleanNotes(it.optString("body")), apkAsset(it)) }
                     .reduceOrNull { best, next -> if (isNewer(next.version, best.version)) next else best }
             }
@@ -103,7 +105,10 @@ object UpdateChecker {
             if (x != y) return x > y
         }
         // Same version number: release > beta, then the higher beta.
-        fun beta(v: String) = if (!v.contains('-')) Int.MAX_VALUE else Regex("(\\d+)$").find(v)?.value?.toIntOrNull() ?: 0
+        fun beta(version: String): Int {
+            val v = version.removeSuffix("-yexe")
+            return if (!v.contains('-')) Int.MAX_VALUE else Regex("(\\d+)$").find(v)?.value?.toIntOrNull() ?: 0
+        }
         return beta(candidate) > beta(current)
     }
 }

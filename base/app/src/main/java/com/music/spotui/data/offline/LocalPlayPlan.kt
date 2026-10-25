@@ -13,6 +13,7 @@ object LocalPlayPlan {
     /**
      * The ids to play locally, in play order, or null when the Web Player plays.
      * [ordered]: the list's track ids in the order to play them; [complete]: the whole list is loaded.
+     * [preferStreaming]: online lists keep Spotify first, even when all their songs are saved.
      */
     fun localIds(
         ordered: List<String>,
@@ -20,6 +21,7 @@ object LocalPlayPlan {
         complete: Boolean,
         offline: Boolean,
         dataSaver: Boolean,
+        preferStreaming: Boolean = false,
         isDownloaded: (String) -> Boolean,
     ): List<String>? {
         if (!isDownloaded(picked)) return null
@@ -27,6 +29,6 @@ object LocalPlayPlan {
         val downloaded = ids.filter(isDownloaded)
         if (downloaded.isEmpty()) return null
         if (offline || dataSaver) return downloaded
-        return if (complete && downloaded.size == ids.size) downloaded else null
+        return if (!preferStreaming && complete && downloaded.size == ids.size) downloaded else null
     }
 }

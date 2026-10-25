@@ -165,3 +165,5 @@ dependencies {
 
 
 }
+
+apply(from = rootProject.file("fork.gradle"))

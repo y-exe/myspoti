@@ -187,7 +187,7 @@ fun DownloadsScreen(navController: NavController) {
                 Row(
                     verticalAlignment = Alignment.CenterVertically,
                     modifier = Modifier.fillMaxWidth()
-                        .pressable(0.97f) { if (status == OfflineStatus.Failed) OfflineDownloader.retry(r.trackId) }
+                        .pressable(0.97f) { if (problem) OfflineDownloader.retry(r.trackId) }
                         .padding(horizontal = 16.dp, vertical = 8.dp),
                 ) {
                     GlideImage(

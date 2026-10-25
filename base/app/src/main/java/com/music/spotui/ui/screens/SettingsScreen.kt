@@ -112,6 +112,13 @@ fun SettingsScreen(navController: NavController) {
 
             Section(R.string.settings_section_downloads)
             DownloadQualityPicker()
+            var youtubeFallback by remember { mutableStateOf(com.music.spotui.data.preferences.isYouTubeFallback(ctx)) }
+            OptionRow(
+                label = stringResource(R.string.youtube_fallback_title),
+                detail = stringResource(R.string.youtube_fallback_detail),
+                checked = youtubeFallback,
+                onChecked = { youtubeFallback = it; com.music.spotui.data.preferences.setYouTubeFallback(ctx, it) },
+            )
             // Where downloads come from: a download-source extension.
             Column(
                 Modifier.fillMaxWidth().clickable { navController.navigate(com.music.spotui.ui.navigation.Routes.Extensions.route) }

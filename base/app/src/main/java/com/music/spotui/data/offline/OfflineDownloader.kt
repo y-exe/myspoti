@@ -18,10 +18,12 @@ import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.ensureActive
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runInterruptible
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.withTimeoutOrNull
 import kotlinx.coroutines.sync.withPermit
 import org.json.JSONArray
 import org.json.JSONObject
@@ -131,7 +133,7 @@ object OfflineDownloader {
             return
         }
         // No extension gives download files: say where to get one, instead of a list of failures.
-        if (!com.music.spotui.extensions.Extensions.hasDownloadSource()) {
+        if (!com.music.spotui.extensions.Extensions.hasDownloadSource() && !com.music.spotui.data.preferences.isYouTubeFallback(Graph.app)) {
             if (!auto) scope.launch(Dispatchers.Main) {
                 android.widget.Toast.makeText(Graph.app, app.myspoti.engine.R.string.downloads_need_source, android.widget.Toast.LENGTH_LONG).show()
             }
@@ -165,6 +167,7 @@ object OfflineDownloader {
             added.forEach { requests[it.trackId] = it; OfflineStore.status[it.trackId] = OfflineStatus.Queued }
         }
         start()
+        OfflineDownloadService.start(Graph.app)
         added.forEach { queue.trySend(it) }
     }
 
@@ -261,6 +264,8 @@ object OfflineDownloader {
         running.remove(r.trackId, job)
     }
 
+    fun pendingCount(): Int = synchronized(pending) { pending.size }
+
     private suspend fun download(r: Request): OfflineTrack {
         if (!isDownloadsEnabled(Graph.app)) throw Unavailable("downloads are off")
         val quality = qualityOf(r)
@@ -272,7 +277,15 @@ object OfflineDownloader {
 
             // ── The files the download-source extensions give, tried in their order; each one
             // is checked (real audio, the song's length) before it is taken.
-            val file = resolveAndFetch(r, meta, audioTmp, quality)
+            val file = try {
+                resolveAndFetch(r, meta, audioTmp, quality)
+            } catch (e: Exception) {
+                currentCoroutineContext().ensureActive()
+                if (!com.music.spotui.data.preferences.isYouTubeFallback(Graph.app)) throw e
+                val audio = YouTubeOfflineSource.download(meta.title, meta.artist, meta.durationMs, meta.isrc.orEmpty(), audioTmp, r.trackId) ?: throw e
+                checkAudio(audioTmp, meta)
+                Fetched("YouTube Music", audio.verified, null, audio.extension, audio.codec, audio.bitrateKbps, audio.url)
+            }
             currentCoroutineContext().ensureActive()
 
             val out: File
@@ -309,6 +322,7 @@ object OfflineDownloader {
                     albumId = meta.albumId, durationMs = meta.durationMs, coverUrl = meta.coverUrl,
                     file = out.name, cover = cover, source = file.provider, verified = file.isrcMatched,
                     bytes = out.length(), addedAt = System.currentTimeMillis(), providerId = file.extensionId,
+                    codec = file.codec, bitrateKbps = file.bitrateKbps, sourceUrl = file.sourceUrl,
                 )
             }
         } finally {
@@ -320,9 +334,12 @@ object OfflineDownloader {
         val provider: String,
         val isrcMatched: Boolean,
         /** The id of the download-source extension that supplied it. */
-        val extensionId: String,
+        val extensionId: String?,
         /** The extension of a lossy file kept as served (m4a, mp3); null for a FLAC. */
         val lossy: String? = null,
+        val codec: String = "",
+        val bitrateKbps: Int = 0,
+        val sourceUrl: String = "",
     )
 
     /** This download's quality: the one chosen when it started, else Settings (CD when Settings says "ask"). */
@@ -425,6 +442,11 @@ object OfflineDownloader {
     /** The request, completed by Spotify's track (ISRC, and anything the list lacked). */
     private suspend fun spotifyMeta(r: Request): Meta {
         val api = app.myspoti.host.android.MyspotiRuntime.api
+        // Pending downloads resume before the Web Player finishes starting.
+        // Wait for its catalog session instead of treating a missing ISRC as a catalog miss.
+        if (OfflineStore.isOnline(Graph.app) && !api.ready.value) {
+            withTimeoutOrNull(30_000L) { api.ready.first { it } }
+        }
         val uri = "spotify:track:${r.trackId}"
         val t = runCatching { api.catalog.track(uri) }.onFailure { Log.w(TAG, "${r.title}: Spotify track: $it") }.getOrNull()
         val isrc = runCatching { api.catalog.isrc(uri) }.onFailure { Log.w(TAG, "${r.title}: ISRC: $it") }.getOrNull()

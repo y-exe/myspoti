@@ -424,15 +424,19 @@ class ContextViewModel(
     }
 
     fun play(p: ContextPageModel, song: SongsModel, sort: TrackOrder = TrackOrder()) {
+        state.updateQueue(sort.apply(p.tracks))
+        SongPlayer.registerContext(p.tracks.map { it.url }, p.uri)
+        SongPlayer.registerContextName(p.uri, p.name)
         // No connection (the Web Player cannot stream), or the data saver on mobile data:
-        // the page's downloaded songs play from the phone. Online, a downloaded song also plays
-        // from its file when the whole list is downloaded (it used to stream anyway).
+        // the page's downloaded songs play from the phone. Online, SongPlayer chooses Spotify
+        // first and falls back to the file when the connection is poor.
         val app = Graph.app
         val store = com.music.spotui.data.offline.OfflineStore
         val limited = com.music.spotui.data.DataSaver.active || !store.isOnline(app)
         val ids = com.music.spotui.data.offline.LocalPlayPlan.localIds(
             sort.apply(p.tracks).map { it.spotifyTrackId }, song.spotifyTrackId, p.complete,
-            offline = !store.isOnline(app), dataSaver = com.music.spotui.data.DataSaver.active, isDownloaded = store::isDownloaded,
+            offline = !store.isOnline(app), dataSaver = com.music.spotui.data.DataSaver.active,
+            preferStreaming = true, isDownloaded = store::isDownloaded,
         )
         if (ids != null) {
             val local = ids.mapNotNull { store.tracks[it] }

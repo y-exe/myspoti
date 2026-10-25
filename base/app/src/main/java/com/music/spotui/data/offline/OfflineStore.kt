@@ -34,6 +34,9 @@ data class OfflineTrack(
      * older index stays valid (and its files are not swept as strays).
      */
     val kind: String = KIND_MUSIC,
+    val codec: String = "",
+    val bitrateKbps: Int = 0,
+    val sourceUrl: String = "",
     /**
      * The id of the download-source extension that supplied the file. Null when unknown: a
      * podcast episode, or a download made before this field existed.
@@ -41,12 +44,16 @@ data class OfflineTrack(
     val providerId: String? = null,
 ) {
     val isEpisode: Boolean get() = kind == KIND_PODCAST
+    val isYouTubeFallback: Boolean get() = source == "YouTube Music"
+    val qualityLabel: String get() = listOf(source.takeUnless { it.startsWith("http") }.orEmpty(), codec,
+        if (bitrateKbps > 0) "~$bitrateKbps kbps" else "").filter { it.isNotBlank() }.joinToString(" · ")
 
     fun toJson(): JSONObject = JSONObject()
         .put("id", trackId).put("title", title).put("artist", artist).put("album", album)
         .put("albumId", albumId).put("duration", durationMs).put("coverUrl", coverUrl)
         .put("file", file).put("cover", cover).put("source", source).put("verified", verified)
         .put("bytes", bytes).put("added", addedAt).put("kind", kind)
+        .put("codec", codec).put("bitrateKbps", bitrateKbps).put("sourceUrl", sourceUrl)
         .apply { providerId?.let { put("providerId", it) } }
 
     companion object {
@@ -61,6 +68,7 @@ data class OfflineTrack(
             addedAt = o.optLong("added"),
             // Absent in an index written before podcasts: those entries are all music.
             kind = o.optString("kind").ifBlank { KIND_MUSIC },
+            codec = o.optString("codec"), bitrateKbps = o.optInt("bitrateKbps"), sourceUrl = o.optString("sourceUrl"),
             // Absent in an index written before it was kept: unknown.
             providerId = o.optString("providerId").ifBlank { null },
         )
@@ -148,9 +156,14 @@ object OfflineStore {
 
     fun add(t: OfflineTrack) {
         synchronized(lock) {
-            tracks[t.trackId] = t
-            status.remove(t.trackId)
-            writeIndex()
+            val previous = tracks.put(t.trackId, t)
+            try {
+                writeIndex()
+                status.remove(t.trackId)
+            } catch (e: Exception) {
+                if (previous == null) tracks.remove(t.trackId) else tracks[t.trackId] = previous
+                throw e
+            }
         }
     }
 

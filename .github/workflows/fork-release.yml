@@ -1,0 +1,149 @@
+# Use upstream Gradle tasks and release packaging for the single fork release.
+name: Fork Android
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: fork-android-${{ github.ref }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+defaults:
+  run:
+    working-directory: base
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-java@v6
+        with:
+          distribution: temurin
+          java-version: "21"
+
+      - uses: android-actions/setup-android@v4
+        with:
+          packages: "platforms;android-37.0 build-tools;36.0.0"
+
+      - uses: gradle/actions/setup-gradle@v6
+
+      # App unit tests, plus the JVM modules (API contracts, ad block, offline index, GraphQL
+      # errors). The live tests in host-cdp skip themselves without a browser to drive.
+      - name: Unit tests
+        run: ./gradlew testDebugUnitTest :api:test :api-spotify:test :host-cdp:test :extensions:test
+
+      - name: Download extension
+        run: |
+          ./gradlew :extensions-cli:run --args="check $GITHUB_WORKSPACE/extensions/spotiflac"
+          ./gradlew :extensions-cli:run --args="pack $GITHUB_WORKSPACE/extensions/spotiflac $GITHUB_WORKSPACE/base/app/build/outputs/extensions"
+          mv app/build/outputs/extensions/net.yexe.myspoti.spotiflac-*.zip app/build/outputs/extensions/extension.zip
+
+
+  release:
+    if: startsWith(github.ref, 'refs/tags/v') || (github.ref == 'refs/heads/main' && github.event_name != 'pull_request')
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0  # the previous tag, for a beta's notes
+
+      - uses: actions/setup-java@v6
+        with:
+          distribution: temurin
+          java-version: "21"
+
+      - uses: android-actions/setup-android@v4
+        with:
+          packages: "platforms;android-37.0 build-tools;36.0.0"
+
+      - uses: gradle/actions/setup-gradle@v6
+
+      # One permanent fork key for every release and development update.
+      - name: Signing key
+        env:
+          KEYSTORE_BASE64: ${{ secrets.MYSPOTI_STABLE_KEYSTORE_BASE64 }}
+        run: |
+          test -n "$KEYSTORE_BASE64" || { echo "::error::Release signing key missing"; exit 1; }
+          echo "$KEYSTORE_BASE64" | base64 -d > "$RUNNER_TEMP/release.jks"
+
+      - name: Version
+        id: version
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          git fetch https://github.com/kota-zo/myspoti.git 'refs/tags/*:refs/tags/*'
+          UPSTREAM="$(git describe --tags --abbrev=0 HEAD^ --match 'v[0-9]*')"
+          VERSION="${UPSTREAM#v}-yexe"
+          echo "name=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "tag=v$VERSION" >> "$GITHUB_OUTPUT"
+          # Read the actual upstream APK instead of inventing a fork versionCode.
+          gh release download "$UPSTREAM" --repo kota-zo/myspoti --pattern "myspoti-${UPSTREAM#v}.apk" --dir "$RUNNER_TEMP/upstream"
+          CODE="$("$ANDROID_HOME/build-tools/36.0.0/aapt" dump badging "$RUNNER_TEMP/upstream/myspoti-${UPSTREAM#v}.apk" | sed -n "s/.*versionCode='\([^']*\)'.*/\1/p" | head -1)"
+          [[ "$CODE" =~ ^[0-9]+$ ]]
+          echo "code=$CODE" >> "$GITHUB_OUTPUT"
+
+      - name: Release APK
+        env:
+          MYSPOTI_KEYSTORE: ${{ runner.temp }}/release.jks
+          MYSPOTI_KEYSTORE_PASSWORD: ${{ secrets.MYSPOTI_STABLE_KEYSTORE_PASSWORD }}
+          MYSPOTI_KEY_ALIAS: ${{ secrets.MYSPOTI_STABLE_KEY_ALIAS }}
+          MYSPOTI_KEY_PASSWORD: ${{ secrets.MYSPOTI_STABLE_KEY_PASSWORD }}
+        run: |
+          VERSION="${{ steps.version.outputs.name }}"
+          ./gradlew assembleRelease \
+            -PappVersionName="$VERSION" \
+            -PappVersionCode="${{ steps.version.outputs.code }}" \
+            -PupdateRepo="$GITHUB_REPOSITORY"
+          mv app/build/outputs/apk/release/app-release.apk "app/build/outputs/apk/release/myspoti-$VERSION.apk"
+
+      - name: Download extension
+        run: |
+          ./gradlew :extensions-cli:run --args="pack $GITHUB_WORKSPACE/extensions/spotiflac $GITHUB_WORKSPACE/base/app/build/outputs/extensions"
+          mv app/build/outputs/extensions/net.yexe.myspoti.spotiflac-*.zip app/build/outputs/extensions/extension.zip
+
+      # Reuse the upstream changelog section with the fork's suffix removed.
+      - name: Release notes
+        env:
+          VERSION: ${{ steps.version.outputs.name }}
+        run: |
+          UPSTREAM_VERSION="${VERSION%-yexe}"
+          printf '%s\n\n' "Myspoti $VERSION" 'Spotify を優先し、接続不良なら保存音源へ即切替。通常の待ち時間は最大3秒。' > release-notes.md
+          awk -v v="$UPSTREAM_VERSION" '$0 == "## " v {f=1; next} /^## / && f {exit} f' ../CHANGELOG.md >> release-notes.md
+
+      - name: Update release tag
+        run: |
+          git tag -f "${{ steps.version.outputs.tag }}" "$GITHUB_SHA"
+          git push --force origin "refs/tags/${{ steps.version.outputs.tag }}"
+
+      - uses: softprops/action-gh-release@v3
+        with:
+          tag_name: ${{ steps.version.outputs.tag }}
+          target_commitish: ${{ github.sha }}
+          files: |
+            base/app/build/outputs/apk/release/myspoti-*.apk
+            base/app/build/outputs/extensions/*.zip
+          body_path: base/release-notes.md
+          generate_release_notes: false
+          # One channel also keeps the standard extension installer on releases/latest.
+          prerelease: false
+          make_latest: true
+
+      - name: Keep only the current release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          CURRENT_TAG: ${{ steps.version.outputs.tag }}
+        run: |
+          gh api --paginate "repos/$GITHUB_REPOSITORY/releases?per_page=100" --jq '.[].tag_name' |
+          while IFS= read -r tag; do
+            [ "$tag" = "$CURRENT_TAG" ] || gh release delete "$tag" --repo "$GITHUB_REPOSITORY" --cleanup-tag --yes
+          done
